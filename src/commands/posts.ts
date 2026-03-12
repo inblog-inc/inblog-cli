@@ -1,8 +1,9 @@
 import { Command } from 'commander';
 import * as fs from 'node:fs';
 import { createClientFromCommand, isJsonMode } from '../utils/client-factory.js';
-import { printJson, printTable, printDetail, printSuccess, truncate } from '../utils/output.js';
+import { printJson, printTable, printDetail, printSuccess, printWarning, truncate } from '../utils/output.js';
 import { handleError } from '../utils/errors.js';
+import { resolveImageUrl, processContentImages } from '../utils/upload.js';
 import type { PostCreateInput } from '../sdk/types.js';
 import type { Post } from '../sdk/types.js';
 
@@ -112,6 +113,7 @@ export function registerPostsCommands(program: Command): void {
     .option('-d, --description <desc>', 'Post description')
     .option('--content <html>', 'HTML content')
     .option('--content-file <path>', 'Read HTML content from file')
+    .option('--image <path-or-url>', 'Cover image (local file or URL)')
     .option('--notion-url <url>', 'Notion page URL')
     .option('--published', 'Publish immediately')
     .option('--tag-ids <ids>', 'Comma-separated tag IDs')
@@ -130,10 +132,20 @@ export function registerPostsCommands(program: Command): void {
           contentHtml = fs.readFileSync(opts.contentFile, 'utf-8');
         }
 
+        // Upload local/base64 images in content
+        if (contentHtml) {
+          const { html, uploadCount } = await processContentImages(contentHtml);
+          contentHtml = html;
+          if (uploadCount > 0 && !json) {
+            printWarning(`Uploaded ${uploadCount} image(s) to CDN.`);
+          }
+        }
+
         const input: Record<string, any> = { title: opts.title };
         if (opts.slug) input.slug = opts.slug;
         if (opts.description) input.description = opts.description;
         if (contentHtml) input.content_html = contentHtml;
+        if (opts.image) input.image = { url: await resolveImageUrl(opts.image, 'featured_image') };
         if (opts.notionUrl) input.notion_url = opts.notionUrl;
         if (opts.published) input.published = true;
         if (opts.canonicalUrl) input.canonical_url = opts.canonicalUrl;
@@ -163,6 +175,7 @@ export function registerPostsCommands(program: Command): void {
     .option('-d, --description <desc>', 'Post description')
     .option('--content <html>', 'HTML content')
     .option('--content-file <path>', 'Read HTML content from file')
+    .option('--image <path-or-url>', 'Cover image (local file or URL)')
     .option('--canonical-url <url>', 'Canonical URL')
     .option('--meta-title <title>', 'Meta title')
     .option('--meta-description <desc>', 'Meta description')
@@ -177,11 +190,21 @@ export function registerPostsCommands(program: Command): void {
           contentHtml = fs.readFileSync(opts.contentFile, 'utf-8');
         }
 
+        // Upload local/base64 images in content
+        if (contentHtml) {
+          const { html, uploadCount } = await processContentImages(contentHtml);
+          contentHtml = html;
+          if (uploadCount > 0 && !json) {
+            printWarning(`Uploaded ${uploadCount} image(s) to CDN.`);
+          }
+        }
+
         const input: Record<string, any> = {};
         if (opts.title) input.title = opts.title;
         if (opts.slug) input.slug = opts.slug;
         if (opts.description) input.description = opts.description;
         if (contentHtml) input.content_html = contentHtml;
+        if (opts.image) input.image = { url: await resolveImageUrl(opts.image, 'featured_image') };
         if (opts.canonicalUrl !== undefined) input.canonical_url = opts.canonicalUrl || null;
         if (opts.metaTitle !== undefined) input.meta_title = opts.metaTitle || null;
         if (opts.metaDescription !== undefined) input.meta_description = opts.metaDescription || null;

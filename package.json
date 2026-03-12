@@ -1,6 +1,6 @@
 {
   "name": "@inblog/cli",
-  "version": "0.2.0",
+  "version": "0.2.5",
   "description": "CLI tool for managing inblog.ai content",
   "bin": {
     "inblog": "./dist/bin/inblog.js"

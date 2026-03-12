@@ -8,11 +8,11 @@ export class BlogsEndpoint {
     return this.client.get<Blog>('/v1/blogs/me');
   }
 
-  async update(subdomain: string, input: BlogUpdateInput) {
+  async update(input: BlogUpdateInput) {
     return this.client.update<Blog>(
-      `/v1/blogs/${subdomain}`,
+      '/v1/blogs/me',
       'blogs',
-      subdomain,
+      'me',
       input as Record<string, any>,
     );
   }

@@ -9,6 +9,7 @@ import { registerFormsCommands, registerFormResponsesCommands } from '../src/com
 import { registerConfigCommands } from '../src/commands/config.js';
 import { registerSearchConsoleCommands } from '../src/commands/search-console.js';
 import { registerAnalyticsCommands } from '../src/commands/analytics.js';
+import { registerImagesCommands } from '../src/commands/images.js';
 
 
 const program = new Command();
@@ -32,4 +33,5 @@ registerFormResponsesCommands(program);
 registerConfigCommands(program);
 registerSearchConsoleCommands(program);
 registerAnalyticsCommands(program);
+registerImagesCommands(program);
 program.parse();
