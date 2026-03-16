@@ -1,12 +1,11 @@
 import { Command } from 'commander';
-import { select } from '@inquirer/prompts';
 import open from 'open';
 import { readConfig } from '../utils/config.js';
 import { printJson, printSuccess, printDetail, printWarning } from '../utils/output.js';
 import { isJsonMode } from '../utils/client-factory.js';
 import { handleError } from '../utils/errors.js';
 import { generateCodeVerifier, generateCodeChallenge } from '../utils/pkce.js';
-import { startCallbackServer } from '../utils/callback-server.js';
+import { createAuthServer } from '../utils/callback-server.js';
 import { writeSession, readSession, clearSession } from '../utils/token-store.js';
 import { exchangeCodeForTokens, SUPABASE_URL } from '../utils/token-refresh.js';
 
@@ -16,13 +15,11 @@ export function registerAuthCommands(program: Command): void {
   auth
     .command('login')
     .description('Log in with your Google account')
+    .option('--blog <id-or-subdomain>', 'Select blog by ID or subdomain (skips browser blog selection)')
     .action(async function (this: Command) {
       const json = isJsonMode(this);
+      const blogArg: string | undefined = this.opts().blog;
       try {
-        if (json) {
-          throw new Error('Interactive login is not available in --json mode.');
-        }
-
         // Check if already logged in
         const existingSession = readSession();
         if (existingSession) {
@@ -33,30 +30,31 @@ export function registerAuthCommands(program: Command): void {
         const codeVerifier = generateCodeVerifier();
         const codeChallenge = generateCodeChallenge(codeVerifier);
 
-        // Start callback server
-        const serverPromise = startCallbackServer();
+        // Start auth server (handles OAuth callback + browser blog selection)
+        const server = await createAuthServer();
 
-        // Wait a tick for the server to start, then open browser
-        await new Promise((r) => setTimeout(r, 100));
-
-        const redirectUri = `http://127.0.0.1:54321/auth/callback`;
+        const redirectUri = `http://127.0.0.1:${server.port}/auth/callback`;
         const authUrl = new URL(`${SUPABASE_URL}/auth/v1/authorize`);
         authUrl.searchParams.set('provider', 'google');
         authUrl.searchParams.set('redirect_to', redirectUri);
         authUrl.searchParams.set('code_challenge', codeChallenge);
         authUrl.searchParams.set('code_challenge_method', 'S256');
 
-        console.log('Opening browser for login...');
+        if (!json) {
+          console.log('Opening browser for login...');
+        }
         await open(authUrl.toString());
-        console.log('Waiting for authentication...');
+        if (!json) {
+          console.log('Waiting for authentication...');
+        }
 
-        // Wait for callback
-        const { code } = await serverPromise;
+        // Phase 1: Wait for OAuth callback
+        const code = await server.waitForCode();
 
         // Exchange code for tokens
         const tokens = await exchangeCodeForTokens(code, codeVerifier);
 
-        // Fetch user's blogs to pick an active one
+        // Fetch user's blogs
         const config = readConfig();
         const baseUrl = this.optsWithGlobals().baseUrl || config.baseUrl || 'https://inblog.ai';
         const response = await fetch(`${baseUrl}/api/v1/user/blogs`, {
@@ -68,6 +66,7 @@ export function registerAuthCommands(program: Command): void {
         });
 
         if (!response.ok) {
+          server.close();
           writeSession({ tokens });
           printSuccess('Logged in successfully.');
           printWarning('Could not fetch blog list. Run `inblog blogs list` to select a blog.');
@@ -78,49 +77,76 @@ export function registerAuthCommands(program: Command): void {
         const blogs = blogsData.data || [];
 
         if (blogs.length === 0) {
+          server.close();
           writeSession({ tokens });
-          printSuccess('Logged in, but you have no blogs yet.');
+          if (json) {
+            printJson({ success: true, message: 'Logged in, but you have no blogs yet.' });
+          } else {
+            printSuccess('Logged in, but you have no blogs yet.');
+          }
           return;
         }
 
-        let activeBlogId: number;
-        let activeBlogSubdomain: string;
-        let activeBlogPlan: string | undefined;
-
-        if (blogs.length === 1) {
-          activeBlogId = parseInt(blogs[0].id, 10);
-          activeBlogSubdomain = blogs[0].attributes.subdomain;
-          activeBlogPlan = blogs[0].attributes.plan;
-        } else {
-          const choices = blogs.map((b: any) => ({
-            name: `${b.attributes.title} (${b.attributes.subdomain}) [${b.attributes.permission}]`,
-            value: { id: parseInt(b.id, 10), subdomain: b.attributes.subdomain },
-          }));
-
-          const selected = await select<{ id: number; subdomain: string }>({
-            message: 'Select a blog to use:',
-            choices,
+        // Phase 2: Blog selection (in browser or via --blog flag)
+        if (blogArg) {
+          // --blog flag: match by ID or subdomain
+          const target = blogs.find((b: any) => b.id === blogArg || b.attributes.subdomain === blogArg);
+          if (!target) {
+            server.close();
+            throw new Error(`Blog not found: ${blogArg}. Run \`inblog blogs list\` to see available blogs.`);
+          }
+          server.setAutoSelectedBlog({
+            id: parseInt(target.id, 10),
+            subdomain: target.attributes.subdomain,
+            plan: target.attributes.plan,
           });
-
-          activeBlogId = selected.id;
-          activeBlogSubdomain = selected.subdomain;
-          const selectedBlog = blogs.find((b: any) => parseInt(b.id, 10) === activeBlogId);
-          activeBlogPlan = selectedBlog?.attributes.plan;
+        } else if (blogs.length === 1) {
+          // Single blog: auto-select
+          server.setAutoSelectedBlog({
+            id: parseInt(blogs[0].id, 10),
+            subdomain: blogs[0].attributes.subdomain,
+            plan: blogs[0].attributes.plan,
+          });
+        } else {
+          // Multiple blogs: show selection UI in browser
+          if (!json) {
+            console.log('Multiple blogs found. Please select one in your browser...');
+          }
+          server.setBlogs(blogs.map((b: any) => ({
+            id: parseInt(b.id, 10),
+            title: b.attributes.title,
+            subdomain: b.attributes.subdomain,
+            permission: b.attributes.permission,
+            plan: b.attributes.plan,
+          })));
         }
+
+        // Wait for blog selection (resolves immediately for auto-selected)
+        const selectedBlog = await server.waitForBlogSelection();
+        server.close();
 
         writeSession({
           tokens,
-          activeBlogId,
-          activeBlogSubdomain,
-          activeBlogPlan,
+          activeBlogId: selectedBlog.id,
+          activeBlogSubdomain: selectedBlog.subdomain,
+          activeBlogPlan: selectedBlog.plan,
         });
 
-        printSuccess(`Logged in. Active blog: ${activeBlogSubdomain}`);
+        if (json) {
+          printJson({
+            success: true,
+            blogId: selectedBlog.id,
+            subdomain: selectedBlog.subdomain,
+            plan: selectedBlog.plan,
+          });
+        } else {
+          printSuccess(`Logged in. Active blog: ${selectedBlog.subdomain}`);
+        }
 
-        if (activeBlogPlan !== 'team' && activeBlogPlan !== 'enterprise') {
-          printWarning(`Blog "${activeBlogSubdomain}" is on the ${activeBlogPlan || 'free'} plan.`);
+        if (selectedBlog.plan !== 'team' && selectedBlog.plan !== 'enterprise') {
+          printWarning(`Blog "${selectedBlog.subdomain}" is on the ${selectedBlog.plan || 'free'} plan.`);
           printWarning('  CLI features require a Team plan or above.');
-          printWarning(`  Upgrade: https://inblog.ai/dashboard/${activeBlogSubdomain}/settings/billing`);
+          printWarning(`  Upgrade: https://inblog.ai/dashboard/${selectedBlog.subdomain}/settings/billing`);
         }
       } catch (error) {
         handleError(error, json);
