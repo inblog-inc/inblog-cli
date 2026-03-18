@@ -42,16 +42,20 @@ export class PostsEndpoint {
   }
 
   async publish(id: string) {
-    return this.client.post<Post>(`/v1/posts/${id}/publish`);
+    return this.client.patch<Post>(`/v1/posts/${id}/publish`, {
+      data: { type: 'publish_action', attributes: { action: 'publish' } },
+    });
   }
 
   async unpublish(id: string) {
-    return this.client.post<Post>(`/v1/posts/${id}/unpublish`);
+    return this.client.patch<Post>(`/v1/posts/${id}/publish`, {
+      data: { type: 'publish_action', attributes: { action: 'unpublish' } },
+    });
   }
 
   async schedule(id: string, scheduledAt: string) {
-    return this.client.post<Post>(`/v1/posts/${id}/schedule`, {
-      data: { type: 'posts', attributes: { published_at: scheduledAt } },
+    return this.client.patch<Post>(`/v1/posts/${id}/publish`, {
+      data: { type: 'publish_action', attributes: { action: 'schedule', published_at: scheduledAt } },
     });
   }
 
