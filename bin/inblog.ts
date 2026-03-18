@@ -10,14 +10,16 @@ import { registerConfigCommands } from '../src/commands/config.js';
 import { registerSearchConsoleCommands } from '../src/commands/search-console.js';
 import { registerAnalyticsCommands } from '../src/commands/analytics.js';
 import { registerImagesCommands } from '../src/commands/images.js';
+import { registerUpdateCommand } from '../src/commands/update.js';
 
+declare const __PKG_VERSION__: string;
 
 const program = new Command();
 
 program
   .name('inblog')
   .description('CLI for managing inblog.ai blog content (posts, tags, authors, redirects, forms)')
-  .version('0.2.0')
+  .version(__PKG_VERSION__)
   .option('--json', 'Output as JSON (for programmatic use)')
   .option('--base-url <url>', 'API base URL')
   .option('--no-color', 'Disable colored output');
@@ -34,4 +36,5 @@ registerConfigCommands(program);
 registerSearchConsoleCommands(program);
 registerAnalyticsCommands(program);
 registerImagesCommands(program);
+registerUpdateCommand(program);
 program.parse();
