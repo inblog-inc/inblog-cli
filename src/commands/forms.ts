@@ -4,7 +4,11 @@ import { printJson, printTable, printDetail, truncate } from '../utils/output.js
 import { handleError } from '../utils/errors.js';
 
 export function registerFormsCommands(program: Command): void {
-  const forms = program.command('forms').description('View lead-capture forms (read-only)');
+  const forms = program.command('forms').description('View lead-capture forms (read-only)')
+    .addHelpText('after', `
+Examples:
+  $ inblog forms list --json                   List all forms
+  $ inblog forms get <id> --json               Get form details`);
 
   forms
     .command('list')
@@ -60,7 +64,11 @@ export function registerFormsCommands(program: Command): void {
 }
 
 export function registerFormResponsesCommands(program: Command): void {
-  const formResponses = program.command('form-responses').description('View form submission data (read-only)');
+  const formResponses = program.command('form-responses').description('View form submission data (read-only)')
+    .addHelpText('after', `
+Examples:
+  $ inblog form-responses list --form-id 5 --json   List responses for form 5
+  $ inblog form-responses get <id> --json            Get response details`);
 
   formResponses
     .command('list')

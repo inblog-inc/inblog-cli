@@ -4,7 +4,13 @@ import { printJson, printTable, printDetail, printSuccess } from '../utils/outpu
 import { handleError } from '../utils/errors.js';
 
 export function registerRedirectsCommands(program: Command): void {
-  const redirects = program.command('redirects').description('CRUD URL redirects (307 temporary, 308 permanent)');
+  const redirects = program.command('redirects').description('CRUD URL redirects (307 temporary, 308 permanent)')
+    .addHelpText('after', `
+Examples:
+  $ inblog redirects list --json                         List all redirects
+  $ inblog redirects create --from "/old" --to "/new" --type 308 --json
+  $ inblog redirects update <id> --to "/newer" --json    Update destination
+  $ inblog redirects delete <id> --json                  Remove a redirect`);
 
   redirects
     .command('list')

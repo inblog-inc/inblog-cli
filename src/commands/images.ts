@@ -7,7 +7,13 @@ import { uploadImage, type ImageBucket } from '../utils/upload.js';
 const VALID_BUCKETS: ImageBucket[] = ['post_image', 'featured_image', 'logo', 'favicon', 'og_image', 'banner', 'avatar'];
 
 export function registerImagesCommands(program: Command): void {
-  const images = program.command('images').description('Upload images to inblog CDN');
+  const images = program.command('images').description('Upload images to inblog CDN')
+    .addHelpText('after', `
+Examples:
+  $ inblog images upload ./photo.png --json                Upload single image
+  $ inblog images upload ./a.png ./b.jpg --bucket featured_image --json
+
+Valid buckets: post_image, featured_image, logo, favicon, og_image, banner, avatar`);
 
   images
     .command('upload <file...>')

@@ -10,7 +10,13 @@ import { writeSession, readSession, clearSession } from '../utils/token-store.js
 import { exchangeCodeForTokens, SUPABASE_URL } from '../utils/token-refresh.js';
 
 export function registerAuthCommands(program: Command): void {
-  const auth = program.command('auth').description('Manage authentication');
+  const auth = program.command('auth').description('Manage authentication')
+    .addHelpText('after', `
+Examples:
+  $ inblog auth login                          Log in with Google OAuth
+  $ inblog auth login --blog my-blog           Log in and select blog by subdomain
+  $ inblog auth status --json                  Check login status as JSON
+  $ inblog auth logout                         Clear stored session`);
 
   auth
     .command('login')

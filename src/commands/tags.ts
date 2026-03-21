@@ -5,7 +5,13 @@ import { handleError } from '../utils/errors.js';
 import type { TagCreateInput } from '../sdk/types.js';
 
 export function registerTagsCommands(program: Command): void {
-  const tags = program.command('tags').description('CRUD tags (no pagination, sorted by priority)');
+  const tags = program.command('tags').description('CRUD tags (no pagination, sorted by priority)')
+    .addHelpText('after', `
+Examples:
+  $ inblog tags list --json                              List all tags
+  $ inblog tags create --name "React" --slug "react" --json
+  $ inblog tags update 5 --name "React.js" --json       Rename a tag
+  $ inblog tags delete 5 --json                          Delete a tag`);
 
   tags
     .command('list')

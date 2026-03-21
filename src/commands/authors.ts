@@ -4,7 +4,12 @@ import { printJson, printTable, printDetail, printSuccess, truncate } from '../u
 import { handleError } from '../utils/errors.js';
 
 export function registerAuthorsCommands(program: Command): void {
-  const authors = program.command('authors').description('List, view, update authors (create not available)');
+  const authors = program.command('authors').description('List, view, update authors (create not available)')
+    .addHelpText('after', `
+Examples:
+  $ inblog authors list --json                 List all authors
+  $ inblog authors get <uuid> --json           Get author by UUID
+  $ inblog authors update <uuid> --name "Jane Doe" --json`);
 
   authors
     .command('list')
