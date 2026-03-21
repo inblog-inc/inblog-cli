@@ -21,8 +21,20 @@ program
   .description('CLI for managing inblog.ai blog content (posts, tags, authors, redirects, forms)')
   .version(__PKG_VERSION__)
   .option('--json', 'Output as JSON (for programmatic use)')
+  .option('--no-input', 'Disable interactive prompts (fail instead of prompting)')
   .option('--base-url <url>', 'API base URL')
-  .option('--no-color', 'Disable colored output');
+  .option('--no-color', 'Disable colored output')
+  .addHelpText('after', `
+Examples:
+  $ inblog auth login                          Log in with Google OAuth
+  $ inblog posts list --published --json       List published posts as JSON
+  $ inblog posts create --title "Hello" --content-file ./post.html --json
+  $ inblog tags list --json                    List all tags
+  $ inblog analytics traffic --start-date 2025-01-01 --json
+
+Environment:
+  Config: ~/.config/inblog/config.json
+  Docs:   https://inblog.ai/docs/api`);
 
 registerAuthCommands(program);
 registerPostsCommands(program);
