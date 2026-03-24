@@ -26,7 +26,17 @@ function formatPost(post: Post): [string, any][] {
 }
 
 export function registerPostsCommands(program: Command): void {
-  const posts = program.command('posts').description('CRUD, publish, schedule posts + manage tags/authors');
+  const posts = program.command('posts').description('CRUD, publish, schedule posts + manage tags/authors')
+    .addHelpText('after', `
+Examples:
+  $ inblog posts list --published --limit 5 --json       List 5 published posts
+  $ inblog posts list --draft --tag-id 3 --json          List drafts with tag ID 3
+  $ inblog posts create --title "My Post" --content-file ./content.html --tag-ids 1,2 --json
+  $ inblog posts update 123 --title "New Title" --json   Update post title
+  $ inblog posts publish 123 --json                      Publish a draft
+  $ inblog posts schedule 123 --at "2025-06-01T09:00:00+09:00" --json
+  $ inblog posts add-tags 123 --tag-ids 4,5 --json       Add tags to a post
+  $ inblog posts delete 123 --json                       Delete a post`);
 
   posts
     .command('list')

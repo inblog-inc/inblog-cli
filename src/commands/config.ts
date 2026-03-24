@@ -11,7 +11,13 @@ import { isJsonMode } from '../utils/client-factory.js';
 import { handleError } from '../utils/errors.js';
 
 export function registerConfigCommands(program: Command): void {
-  const config = program.command('config').description('Manage CLI config (~/.config/inblog/config.json)');
+  const config = program.command('config').description('Manage CLI config (~/.config/inblog/config.json)')
+    .addHelpText('after', `
+Examples:
+  $ inblog config list --json                  Show all config values
+  $ inblog config set baseUrl https://custom.inblog.ai
+  $ inblog config get baseUrl                  Get a single config value
+  $ inblog config path --json                  Show config file paths`);
 
   config
     .command('list')

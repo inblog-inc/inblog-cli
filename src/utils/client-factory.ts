@@ -74,3 +74,11 @@ export function createClientFromCommand(cmd: Command): ClientContext {
 export function isJsonMode(cmd: Command): boolean {
   return cmd.optsWithGlobals().json === true;
 }
+
+/**
+ * Get global --no-input flag value from command hierarchy.
+ * When true, interactive prompts should fail instead of prompting.
+ */
+export function isNoInputMode(cmd: Command): boolean {
+  return cmd.optsWithGlobals().noInput === true;
+}

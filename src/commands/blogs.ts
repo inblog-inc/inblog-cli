@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { select } from '@inquirer/prompts';
 import open from 'open';
-import { createClientFromCommand, isJsonMode } from '../utils/client-factory.js';
+import { createClientFromCommand, isJsonMode, isNoInputMode } from '../utils/client-factory.js';
 import { readSession, setActiveBlog } from '../utils/token-store.js';
 import { getValidAccessToken } from '../utils/token-refresh.js';
 import { printJson, printDetail, printSuccess, printTable, printWarning } from '../utils/output.js';
@@ -11,7 +11,16 @@ import { lookupNameservers, detectDnsProvider, getDnsProviderGuide, isSubdomain 
 import { resolveImageUrl } from '../utils/upload.js';
 
 export function registerBlogsCommands(program: Command): void {
-  const blogs = program.command('blogs').description('Manage blogs — list, switch, view, and update blog settings');
+  const blogs = program.command('blogs').description('Manage blogs — list, switch, view, and update blog settings')
+    .addHelpText('after', `
+Examples:
+  $ inblog blogs me --json                     Show current blog info
+  $ inblog blogs list --json                   List all accessible blogs
+  $ inblog blogs switch my-blog                Switch active blog by subdomain
+  $ inblog blogs update --title "New Name" --json
+  $ inblog blogs domain connect example.com    Connect custom domain
+  $ inblog blogs domain status --json          Check domain verification
+  $ inblog blogs banner set --title "Welcome" --bg-color "#1a1a2e" --json`);
 
   blogs
     .command('me')
@@ -175,8 +184,8 @@ export function registerBlogsCommands(program: Command): void {
           selectedBlogId = parseInt(target.id, 10);
           selectedSubdomain = target.attributes.subdomain;
         } else {
-          if (json) {
-            throw new Error('Blog ID is required in --json mode. Usage: inblog blogs switch <blog-id>');
+          if (json || isNoInputMode(this)) {
+            throw new Error('Blog ID is required in --json or --no-input mode. Usage: inblog blogs switch <blog-id>');
           }
 
           const choices = blogsList.map((b: any) => ({

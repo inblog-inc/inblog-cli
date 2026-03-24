@@ -6,7 +6,14 @@ import { handleError } from '../utils/errors.js';
 export function registerAnalyticsCommands(program: Command): void {
   const analytics = program
     .command('analytics')
-    .description('Blog analytics: traffic, post metrics, referrer sources');
+    .description('Blog analytics: traffic, post metrics, referrer sources')
+    .addHelpText('after', `
+Examples:
+  $ inblog analytics traffic --start-date 2025-01-01 --end-date 2025-01-31 --json
+  $ inblog analytics posts --sort visits --limit 10 --include title --json
+  $ inblog analytics sources --limit 20 --json
+  $ inblog analytics post 123 --start-date 2025-01-01 --json
+  $ inblog analytics post 123 --sources --json     Show referrer sources for a post`);
 
   analytics
     .command('traffic')

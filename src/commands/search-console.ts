@@ -8,7 +8,14 @@ import { startCallbackServer } from '../utils/callback-server.js';
 export function registerSearchConsoleCommands(program: Command): void {
   const sc = program
     .command('search-console')
-    .description('Google Search Console integration');
+    .description('Google Search Console integration')
+    .addHelpText('after', `
+Examples:
+  $ inblog search-console connect              Connect via Google OAuth
+  $ inblog search-console status --json        Check connection status
+  $ inblog search-console keywords --sort clicks --limit 20 --json
+  $ inblog search-console pages --start-date 2025-01-01 --json
+  $ inblog search-console disconnect           Remove connection`);
 
   sc.command('connect')
     .description('Connect Google Search Console via OAuth')
