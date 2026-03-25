@@ -17,6 +17,15 @@ const MIME_TYPES: Record<string, string> = {
   '.ico': 'image/x-icon',
 };
 
+const MIME_TO_EXT: Record<string, string> = {
+  'image/png': '.png',
+  'image/jpeg': '.jpg',
+  'image/gif': '.gif',
+  'image/webp': '.webp',
+  'image/svg+xml': '.svg',
+  'image/x-icon': '.ico',
+};
+
 export type ImageBucket =
   | 'favicon'
   | 'featured_image'
@@ -34,14 +43,21 @@ function getUploadUrl(): string {
 
 async function getAuthHeader(): Promise<string> {
   const token = await getValidAccessToken();
-  if (!token) {
-    const session = readSession();
-    if (!session?.tokens?.access_token) {
-      throw new Error('Not logged in. Run `inblog auth login` first.');
-    }
-    return `Bearer ${session.tokens.access_token}`;
+  if (token) return `Bearer ${token}`;
+  const session = readSession();
+  if (!session?.tokens?.access_token) {
+    throw new Error('Not logged in. Run `inblog auth login` first.');
   }
-  return `Bearer ${token}`;
+  return `Bearer ${session.tokens.access_token}`;
+}
+
+function getBlogIdHeader(): string | undefined {
+  const session = readSession();
+  return session?.activeBlogId?.toString();
+}
+
+function buildFileKey(bucket: string, ext: string): string {
+  return `${bucket}/${Date.now()}-${randomUUID()}${ext}`;
 }
 
 /**
@@ -53,7 +69,7 @@ export function isLocalPath(value: string): boolean {
 }
 
 /**
- * Uploads a local image file to inblog R2 storage via server proxy.
+ * Uploads a local image file to inblog R2 storage via authenticated API proxy.
  * Returns the public CDN URL.
  */
 export async function uploadImage(filePath: string, bucket: ImageBucket): Promise<string> {
@@ -70,24 +86,31 @@ export async function uploadImage(filePath: string, bucket: ImageBucket): Promis
 
   const ext = path.extname(resolved).toLowerCase();
   const contentType = MIME_TYPES[ext] || 'application/octet-stream';
-
-  const fileKey = `${bucket}/${new Date().toISOString()}-${randomUUID()}`;
+  const fileKey = buildFileKey(bucket, ext);
   const body = fs.readFileSync(resolved);
 
   const uploadUrl = getUploadUrl();
   const authHeader = await getAuthHeader();
+  const blogId = getBlogIdHeader();
 
-  const response = await fetch(`${uploadUrl}?fileKey=${fileKey}`, {
+  const url = new URL(uploadUrl);
+  url.searchParams.set('fileKey', fileKey);
+
+  const headers: Record<string, string> = {
+    'Content-Type': contentType,
+    Authorization: authHeader,
+  };
+  if (blogId) headers['X-Blog-Id'] = blogId;
+
+  const response = await fetch(url, {
     method: 'POST',
     body,
-    headers: {
-      'Content-Type': contentType,
-      Authorization: authHeader,
-    },
+    headers,
   });
 
   if (!response.ok) {
-    throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
+    const text = await response.text().catch(() => '');
+    throw new Error(`Upload failed: ${response.status} ${response.statusText}${text ? ` — ${text}` : ''}`);
   }
 
   const data: any = await response.json();
@@ -114,25 +137,34 @@ async function uploadBase64(dataUri: string, bucket: ImageBucket): Promise<strin
   const body = Buffer.from(match[2], 'base64');
 
   if (body.length > MAX_FILE_SIZE) {
-    throw new Error(`Base64 image exceeds 10MB limit: ${(body.length / 1024 / 1024).toFixed(1)}MB`);
+    throw new Error(`Image exceeds 10MB limit: ${(body.length / 1024 / 1024).toFixed(1)}MB`);
   }
 
-  const fileKey = `${bucket}/${new Date().toISOString()}-${randomUUID()}`;
+  const ext = MIME_TO_EXT[contentType] || '.bin';
+  const fileKey = buildFileKey(bucket, ext);
 
   const uploadUrl = getUploadUrl();
   const authHeader = await getAuthHeader();
+  const blogId = getBlogIdHeader();
 
-  const response = await fetch(`${uploadUrl}?fileKey=${fileKey}`, {
+  const url = new URL(uploadUrl);
+  url.searchParams.set('fileKey', fileKey);
+
+  const headers: Record<string, string> = {
+    'Content-Type': contentType,
+    Authorization: authHeader,
+  };
+  if (blogId) headers['X-Blog-Id'] = blogId;
+
+  const response = await fetch(url, {
     method: 'POST',
     body,
-    headers: {
-      'Content-Type': contentType,
-      Authorization: authHeader,
-    },
+    headers,
   });
 
   if (!response.ok) {
-    throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
+    const text = await response.text().catch(() => '');
+    throw new Error(`Upload failed: ${response.status} ${response.statusText}${text ? ` — ${text}` : ''}`);
   }
 
   const data: any = await response.json();
@@ -145,7 +177,6 @@ async function uploadBase64(dataUri: string, bucket: ImageBucket): Promise<strin
  * Returns the processed HTML with all images on CDN.
  */
 export async function processContentImages(html: string): Promise<{ html: string; uploadCount: number }> {
-  // Match src="..." in img tags (data-type="imageBlock" or regular img)
   const imgSrcRegex = /(<img\s[^>]*\bsrc=["'])([^"']+)(["'][^>]*>)/gi;
   const matches: { full: string; prefix: string; src: string; suffix: string; index: number }[] = [];
 
@@ -159,29 +190,22 @@ export async function processContentImages(html: string): Promise<{ html: string
   let uploadCount = 0;
   const replacements: Map<string, string> = new Map();
 
-  // Process uploads concurrently (max 5 at a time)
   const concurrency = 5;
   for (let i = 0; i < matches.length; i += concurrency) {
     const batch = matches.slice(i, i + concurrency);
     const results = await Promise.allSettled(
       batch.map(async ({ src }) => {
-        // Skip already-uploaded CDN URLs
         if (src.startsWith('https://source.inblog.dev/') || src.startsWith('https://image.inblog.dev/')) {
           return null;
         }
-
-        // Base64 data URI
         if (src.startsWith('data:image/')) {
           const url = await uploadBase64(src, 'post_image');
           return { src, url };
         }
-
-        // Local file path
         if (isLocalPath(src)) {
           const url = await uploadImage(src, 'post_image');
           return { src, url };
         }
-
         return null;
       }),
     );
@@ -194,10 +218,8 @@ export async function processContentImages(html: string): Promise<{ html: string
     }
   }
 
-  // Apply replacements
   let processed = html;
   for (const [src, url] of replacements) {
-    // Use split/join for replacement to avoid regex special char issues with base64
     processed = processed.split(src).join(url);
   }
 
