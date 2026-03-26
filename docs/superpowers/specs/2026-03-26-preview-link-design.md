@@ -29,7 +29,7 @@
 ```
 1. Authorization 헤더에서 Bearer 토큰 추출
 2. Supabase getUser(token)으로 유저 확인
-3. X-Blog-Id 헤더 또는 post의 blog_id로 profiles_blogs 멤버십 검증
+3. post의 blog_id를 기준으로 profiles_blogs 멤버십 검증 (X-Blog-Id 헤더가 아닌 포스트 자체의 blog_id 사용)
 4. 인증 실패 시 401 반환
 5. 검증된 유저 ID를 createdBy에 사용 (기존 x-user-id 헤더 대체)
 ```
@@ -47,7 +47,9 @@ Bearer 토큰 없음 → 기존 세션/x-user-id 방식 유지 (대시보드 호
 |--------|------|------------|------|
 | POST | `/api/preview-tokens` | `{ post_id, ttl_hours?, one_time?, name? }` | `{ ok, token, share_url, expires_at, site, name }` |
 | GET | `/api/preview-tokens?post_id={id}` | — | `[{ token, share_url, expires_at, one_time, consumed, name }]` |
-| DELETE | `/api/preview-tokens` | `{ token }` | `{ ok, revoked }` |
+| DELETE | `/api/preview-tokens?token={token}` | — | `{ ok, revoked }` |
+
+> **참고:** DELETE는 query parameter로 토큰을 받도록 변경한다. 기존 body 기반 방식은 CLI의 `rawDelete`가 body를 지원하지 않기 때문.
 
 ---
 
@@ -62,22 +64,25 @@ export class PreviewTokensEndpoint {
   constructor(private client: InblogClient) {}
 
   /** 프리뷰 토큰 생성 */
-  async create(postId: number, options?: {
-    ttlHours?: number;    // 기본 24
+  async create(postId: string, options?: {
+    ttlHours?: number;    // CLI 기본값 24, 항상 명시적으로 전송
     oneTime?: boolean;    // 기본 false
     name?: string;
   }): Promise<PreviewToken>
 
   /** 포스트의 활성 토큰 목록 */
-  async list(postId: number): Promise<PreviewToken[]>
+  async list(postId: string): Promise<PreviewToken[]>
 
   /** 토큰 삭제 */
   async revoke(token: string): Promise<void>
 }
 ```
 
-일반 JSON 요청/응답 사용 (`client.rawPost`, `client.rawGet`, `client.rawDelete`).
-경로: `/preview-tokens` (v1 프리픽스 없음).
+- 일반 JSON 요청/응답 사용 (`client.rawPost`, `client.rawGet`).
+- 경로: `/preview-tokens` → `buildUrl`에 의해 `/api/preview-tokens`로 변환됨.
+- `postId`는 CLI 관례에 따라 `string`으로 받고, 서버 전송 시 `parseInt()`로 변환.
+- `revoke`는 `client.rawDelete('/preview-tokens?token=xxx')`로 query parameter 사용.
+- **TTL 주의:** 서버 기본값은 48시간이지만, CLI는 항상 `ttl_hours: 24`를 명시적으로 전송.
 
 **타입 정의 추가: `src/sdk/types.ts`**
 
@@ -85,11 +90,13 @@ export class PreviewTokensEndpoint {
 export interface PreviewToken {
   token: string;
   share_url: string;
-  expires_at: string | null;
+  expires_at: number | null;  // Unix timestamp (ms), SDK에서 표시 시 ISO 문자열로 변환
   one_time: boolean;
   consumed: boolean;
   name?: string;
   site?: string;
+  ttl_sec_left?: number;
+  created_at?: number;
 }
 ```
 
@@ -119,6 +126,8 @@ export interface PreviewToken {
 포스트 생성/수정 완료 후:
 1. 프리뷰 토큰 자동 생성 (24시간 TTL, name: "cli-auto")
 2. 기존 출력 하단에 프리뷰 링크 추가 출력
+3. `--no-preview` 플래그로 비활성화 가능 (배치 작업, CI/CD 용)
+4. 프리뷰 토큰 생성 실패 시 exit code는 0 유지 (메인 동작 성공)
 
 ```
 ✓ Post created (id: 456)
@@ -237,3 +246,6 @@ posts preview revoke <token>
 4. **인증: 기존 엔드포인트에 Bearer 추가** — 새 v1 엔드포인트 불필요
 5. **프리뷰 토큰 생성 실패는 비차단** — 메인 동작(생성/수정)에 영향 없음
 6. **AI 스킬에서 브라우저 확인 권장** — CLI는 링크만 출력, 시각적 확인은 스킬이 가이드
+7. **DELETE는 query parameter** — `rawDelete`가 body를 지원하지 않으므로 `?token=xxx` 방식
+8. **서버 DELETE 엔드포인트도 query parameter 지원 추가** — 기존 body 방식과 양립
+9. **`--no-preview` 플래그** — 배치/CI 환경에서 자동 프리뷰 비활성화 옵션
