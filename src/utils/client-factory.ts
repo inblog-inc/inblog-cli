@@ -12,6 +12,7 @@ import { RedirectsEndpoint } from '../sdk/endpoints/redirects.js';
 import { FormsEndpoint, FormResponsesEndpoint } from '../sdk/endpoints/forms.js';
 import { SearchConsoleEndpoint } from '../sdk/endpoints/search-console.js';
 import { AnalyticsEndpoint } from '../sdk/endpoints/analytics.js';
+import { PreviewTokensEndpoint } from '../sdk/endpoints/preview-tokens.js';
 
 export interface ClientContext {
   client: InblogClient;
@@ -24,6 +25,7 @@ export interface ClientContext {
   formResponses: FormResponsesEndpoint;
   searchConsole: SearchConsoleEndpoint;
   analytics: AnalyticsEndpoint;
+  previewTokens: PreviewTokensEndpoint;
 }
 
 /**
@@ -65,6 +67,7 @@ export function createClientFromCommand(cmd: Command): ClientContext {
     formResponses: new FormResponsesEndpoint(client),
     searchConsole: new SearchConsoleEndpoint(client),
     analytics: new AnalyticsEndpoint(client),
+    previewTokens: new PreviewTokensEndpoint(client),
   };
 }
 

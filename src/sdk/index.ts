@@ -5,6 +5,7 @@ export { AuthorsEndpoint } from './endpoints/authors.js';
 export { BlogsEndpoint } from './endpoints/blogs.js';
 export { RedirectsEndpoint } from './endpoints/redirects.js';
 export { FormsEndpoint, FormResponsesEndpoint } from './endpoints/forms.js';
+export { PreviewTokensEndpoint } from './endpoints/preview-tokens.js';
 export { deserialize, flattenResource, extractMeta } from './deserialize.js';
 export { serialize } from './serialize.js';
 export type * from './types.js';
