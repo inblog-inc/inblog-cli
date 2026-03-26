@@ -256,3 +256,17 @@ export interface FormResponseListOptions extends PaginationOptions {
     form_id?: string;
   };
 }
+
+// ── Preview Tokens ──────────────────────────────────────────
+
+export interface PreviewToken {
+  token: string;
+  share_url: string;
+  expires_at: number | null;
+  one_time: boolean;
+  consumed: boolean;
+  name?: string;
+  site?: string;
+  ttl_sec_left?: number;
+  created_at?: number;
+}
