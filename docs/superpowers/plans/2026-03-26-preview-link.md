@@ -465,49 +465,31 @@ git commit -m "feat: add posts preview, preview list, preview revoke commands"
 **Files:**
 - Modify: `src/commands/posts.ts`
 
-- [ ] **Step 1: Add `--no-preview` option to create command**
+- [ ] **Step 1: Add `--skip-preview` option to create command**
 
 Add option to the `create` command (after line 133, the `--meta-description` option):
 
 ```typescript
-    .option('--no-preview', 'Skip automatic preview link generation')
+    .option('--skip-preview', 'Skip automatic preview link generation')
 ```
+
+> **Note:** We use `--skip-preview` instead of `--no-preview` because Commander.js treats `--no-*` flags specially — `--no-preview` would set `opts.preview = false` rather than `opts.noPreview = true`, which is confusing. `--skip-preview` maps cleanly to `opts.skipPreview`.
 
 - [ ] **Step 2: Add auto-preview logic to create action**
 
-After the successful create output (after `printDetail(formatPost(data));` around line 173), add preview token generation:
+The existing destructuring `const { posts: endpoint } = createClientFromCommand(this);` (line 138) should be changed to also get `previewTokens`:
 
 ```typescript
-        // Auto-generate preview link
-        if (!opts.noPreview) {
-          try {
-            const { previewTokens } = createClientFromCommand(this);
-            const preview = await previewTokens.create(data.id, {
-              ttlHours: 24,
-              name: 'cli-auto',
-            });
-            if (json) {
-              printJson({ ...data, preview: { url: preview.share_url, token: preview.token, expires_at: preview.expires_at } });
-            } else {
-              console.log(`\n  Preview: ${preview.share_url}  (expires in 24h)`);
-            }
-          } catch {
-            if (!json) printWarning('Could not generate preview link.');
-          }
-        }
+        const { posts: endpoint, previewTokens } = createClientFromCommand(this);
 ```
 
-Note: For JSON mode, we need to restructure slightly — the original `printJson(data)` on line 170 should be deferred. Wrap the JSON output:
-
-Replace the existing JSON/table output block (lines 169-174):
+Then replace the existing JSON/table output block (lines 169-174):
 
 ```typescript
         if (json) {
-          // Preview will be appended below if available
           let output: Record<string, any> = { ...data };
-          if (!opts.noPreview) {
+          if (!opts.skipPreview) {
             try {
-              const { previewTokens } = createClientFromCommand(this);
               const pv = await previewTokens.create(data.id, { ttlHours: 24, name: 'cli-auto' });
               output.preview = { url: pv.share_url, token: pv.token, expires_at: pv.expires_at };
             } catch { /* non-blocking */ }
@@ -516,9 +498,8 @@ Replace the existing JSON/table output block (lines 169-174):
         } else {
           printSuccess(`Post created: "${data.title}" (ID: ${data.id})`);
           printDetail(formatPost(data));
-          if (!opts.noPreview) {
+          if (!opts.skipPreview) {
             try {
-              const { previewTokens } = createClientFromCommand(this);
               const pv = await previewTokens.create(data.id, { ttlHours: 24, name: 'cli-auto' });
               console.log(`\n  Preview: ${pv.share_url}  (expires in 24h)`);
             } catch {
@@ -528,12 +509,18 @@ Replace the existing JSON/table output block (lines 169-174):
         }
 ```
 
-- [ ] **Step 3: Add `--no-preview` option and auto-preview to update command**
+- [ ] **Step 3: Add `--skip-preview` option and auto-preview to update command**
 
 Same pattern for update. Add option:
 
 ```typescript
-    .option('--no-preview', 'Skip automatic preview link generation')
+    .option('--skip-preview', 'Skip automatic preview link generation')
+```
+
+Change destructuring to include `previewTokens`:
+
+```typescript
+        const { posts: endpoint, previewTokens } = createClientFromCommand(this);
 ```
 
 Replace the output block (lines 228-232):
@@ -541,9 +528,8 @@ Replace the output block (lines 228-232):
 ```typescript
         if (json) {
           let output: Record<string, any> = { ...data };
-          if (!opts.noPreview) {
+          if (!opts.skipPreview) {
             try {
-              const { previewTokens } = createClientFromCommand(this);
               const pv = await previewTokens.create(id, { ttlHours: 24, name: 'cli-auto' });
               output.preview = { url: pv.share_url, token: pv.token, expires_at: pv.expires_at };
             } catch { /* non-blocking */ }
@@ -551,9 +537,8 @@ Replace the output block (lines 228-232):
           printJson(output);
         } else {
           printSuccess(`Post updated: "${data.title}" (ID: ${data.id})`);
-          if (!opts.noPreview) {
+          if (!opts.skipPreview) {
             try {
-              const { previewTokens } = createClientFromCommand(this);
               const pv = await previewTokens.create(id, { ttlHours: 24, name: 'cli-auto' });
               console.log(`\n  Preview: ${pv.share_url}  (expires in 24h)`);
             } catch {
@@ -579,7 +564,7 @@ git add src/commands/posts.ts
 git commit -m "feat: auto-generate preview link on posts create/update
 
 Preview token (24h TTL) is automatically created after successful
-post creation or update. Use --no-preview to skip. Preview failure
+post creation or update. Use --skip-preview to skip. Preview failure
 is non-blocking — the main operation still succeeds."
 ```
 
@@ -775,8 +760,8 @@ node dist/inblog.js posts preview list <id>
 # Revoke a token
 node dist/inblog.js posts preview revoke <token>
 
-# Test --no-preview flag
-node dist/inblog.js posts create --title "No Preview Test" --content "<p>Test</p>" --no-preview
+# Test --skip-preview flag
+node dist/inblog.js posts create --title "No Preview Test" --content "<p>Test</p>" --skip-preview
 
 # Test JSON mode
 node dist/inblog.js posts create --title "JSON Test" --content "<p>Test</p>" --json

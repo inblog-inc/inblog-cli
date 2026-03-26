@@ -74,7 +74,7 @@ export class PreviewTokensEndpoint {
   async list(postId: string): Promise<PreviewToken[]>
 
   /** 토큰 삭제 */
-  async revoke(token: string): Promise<void>
+  async revoke(token: string): Promise<{ ok: boolean; revoked: boolean }>
 }
 ```
 
@@ -126,7 +126,7 @@ export interface PreviewToken {
 포스트 생성/수정 완료 후:
 1. 프리뷰 토큰 자동 생성 (24시간 TTL, name: "cli-auto")
 2. 기존 출력 하단에 프리뷰 링크 추가 출력
-3. `--no-preview` 플래그로 비활성화 가능 (배치 작업, CI/CD 용)
+3. `--skip-preview` 플래그로 비활성화 가능 (배치 작업, CI/CD 용)
 4. 프리뷰 토큰 생성 실패 시 exit code는 0 유지 (메인 동작 성공)
 
 ```
@@ -248,4 +248,4 @@ posts preview revoke <token>
 6. **AI 스킬에서 브라우저 확인 권장** — CLI는 링크만 출력, 시각적 확인은 스킬이 가이드
 7. **DELETE는 query parameter** — `rawDelete`가 body를 지원하지 않으므로 `?token=xxx` 방식
 8. **서버 DELETE 엔드포인트도 query parameter 지원 추가** — 기존 body 방식과 양립
-9. **`--no-preview` 플래그** — 배치/CI 환경에서 자동 프리뷰 비활성화 옵션
+9. **`--skip-preview` 플래그** — 배치/CI 환경에서 자동 프리뷰 비활성화 옵션
