@@ -131,11 +131,12 @@ Examples:
     .option('--canonical-url <url>', 'Canonical URL')
     .option('--meta-title <title>', 'Meta title')
     .option('--meta-description <desc>', 'Meta description')
+    .option('--skip-preview', 'Skip automatic preview link generation')
     .action(async function (this: Command) {
       const json = isJsonMode(this);
       try {
         const opts = this.opts();
-        const { posts: endpoint } = createClientFromCommand(this);
+        const { posts: endpoint, previewTokens } = createClientFromCommand(this);
 
         let contentHtml = opts.content;
         if (opts.contentFile) {
@@ -167,10 +168,25 @@ Examples:
         const { data } = await endpoint.create(input as PostCreateInput);
 
         if (json) {
-          printJson(data);
+          let output: Record<string, any> = { ...data };
+          if (!opts.skipPreview) {
+            try {
+              const pv = await previewTokens.create(data.id, { ttlHours: 24, name: 'cli-auto' });
+              output.preview = { url: pv.share_url, token: pv.token, expires_at: pv.expires_at };
+            } catch { /* non-blocking */ }
+          }
+          printJson(output);
         } else {
           printSuccess(`Post created: "${data.title}" (ID: ${data.id})`);
           printDetail(formatPost(data));
+          if (!opts.skipPreview) {
+            try {
+              const pv = await previewTokens.create(data.id, { ttlHours: 24, name: 'cli-auto' });
+              console.log(`\n  Preview: ${pv.share_url}  (expires in 24h)`);
+            } catch {
+              printWarning('Could not generate preview link.');
+            }
+          }
         }
       } catch (error) {
         handleError(error, json);
@@ -189,11 +205,12 @@ Examples:
     .option('--canonical-url <url>', 'Canonical URL')
     .option('--meta-title <title>', 'Meta title')
     .option('--meta-description <desc>', 'Meta description')
+    .option('--skip-preview', 'Skip automatic preview link generation')
     .action(async function (this: Command, id: string) {
       const json = isJsonMode(this);
       try {
         const opts = this.opts();
-        const { posts: endpoint } = createClientFromCommand(this);
+        const { posts: endpoint, previewTokens } = createClientFromCommand(this);
 
         let contentHtml = opts.content;
         if (opts.contentFile) {
@@ -226,9 +243,24 @@ Examples:
         const { data } = await endpoint.update(id, input);
 
         if (json) {
-          printJson(data);
+          let output: Record<string, any> = { ...data };
+          if (!opts.skipPreview) {
+            try {
+              const pv = await previewTokens.create(id, { ttlHours: 24, name: 'cli-auto' });
+              output.preview = { url: pv.share_url, token: pv.token, expires_at: pv.expires_at };
+            } catch { /* non-blocking */ }
+          }
+          printJson(output);
         } else {
           printSuccess(`Post updated: "${data.title}" (ID: ${data.id})`);
+          if (!opts.skipPreview) {
+            try {
+              const pv = await previewTokens.create(id, { ttlHours: 24, name: 'cli-auto' });
+              console.log(`\n  Preview: ${pv.share_url}  (expires in 24h)`);
+            } catch {
+              printWarning('Could not generate preview link.');
+            }
+          }
         }
       } catch (error) {
         handleError(error, json);
