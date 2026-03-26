@@ -427,4 +427,94 @@ Examples:
         handleError(error, json);
       }
     });
+
+  // ── Preview sub-commands ──
+
+  const preview = posts
+    .command('preview <id>')
+    .description('Generate a preview link for a post')
+    .option('--ttl <hours>', 'Token TTL in hours (1, 24, 72, 168, 720, 0=never)', '24')
+    .option('--one-time', 'Token can only be used once')
+    .option('--name <name>', 'Name for this preview link')
+    .action(async function (this: Command, id: string) {
+      const json = isJsonMode(this);
+      try {
+        const opts = this.opts();
+        const { previewTokens } = createClientFromCommand(this);
+
+        const result = await previewTokens.create(id, {
+          ttlHours: parseInt(opts.ttl, 10),
+          oneTime: opts.oneTime ?? false,
+          name: opts.name,
+        });
+
+        if (json) {
+          printJson(result);
+        } else {
+          printSuccess('Preview link created');
+          printDetail([
+            ['URL', result.share_url],
+            ['Token', result.token],
+            ['Site', result.site],
+            ['Expires', result.expires_at
+              ? new Date(result.expires_at).toLocaleString()
+              : 'never'],
+          ]);
+        }
+      } catch (error) {
+        handleError(error, json);
+      }
+    });
+
+  preview
+    .command('list <id>')
+    .description('List active preview tokens for a post')
+    .action(async function (this: Command, id: string) {
+      const json = isJsonMode(this);
+      try {
+        const { previewTokens } = createClientFromCommand(this);
+        const tokens = await previewTokens.list(id);
+
+        if (json) {
+          printJson(tokens);
+        } else if (tokens.length === 0) {
+          printWarning('No active preview tokens for this post.');
+        } else {
+          printTable(
+            ['Token', 'Name', 'Expires', 'One-time', 'Used', 'URL'],
+            tokens.map((t) => [
+              truncate(t.token, 12),
+              t.name ?? '—',
+              t.expires_at ? new Date(t.expires_at).toLocaleString() : 'never',
+              t.one_time ? 'yes' : 'no',
+              t.consumed ? 'yes' : 'no',
+              t.share_url,
+            ]),
+          );
+        }
+      } catch (error) {
+        handleError(error, json);
+      }
+    });
+
+  preview
+    .command('revoke <token>')
+    .description('Revoke a preview token')
+    .action(async function (this: Command, token: string) {
+      const json = isJsonMode(this);
+      try {
+        const { previewTokens } = createClientFromCommand(this);
+        const result = await previewTokens.revoke(token);
+
+        if (json) {
+          printJson(result);
+        } else if (result.revoked) {
+          printSuccess('Preview token revoked.');
+        } else {
+          printWarning('Token not found or already revoked.');
+        }
+      } catch (error) {
+        handleError(error, json);
+      }
+    });
 }
