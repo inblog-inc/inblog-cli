@@ -22,8 +22,12 @@ inblog auth status
 # List posts
 inblog posts list
 
-# Create and publish a post
+# Create a post (preview link auto-generated)
 inblog posts create --title "My Post" --slug "my-post" --content-file ./content.html
+
+# Preview before publishing
+# → Preview: https://inblog.io/p/abc123  (expires in 24h)
+
 inblog posts publish <id>
 ```
 
@@ -92,6 +96,18 @@ inblog posts publish <id>                  # Publish immediately
 inblog posts unpublish <id>                # Unpublish
 inblog posts schedule <id> --at "2026-03-15T09:00:00+09:00"
 ```
+
+**Preview links:**
+
+```bash
+inblog posts preview <id>                  # Generate preview link (24h)
+inblog posts preview <id> --ttl 72         # Custom TTL in hours
+inblog posts preview <id> --one-time       # One-time use link
+inblog posts preview list <id>             # List active preview links
+inblog posts preview revoke <token>        # Revoke a link
+```
+
+Preview links are automatically generated when creating or updating posts. Use `--skip-preview` to disable.
 
 **Tags & Authors on posts:**
 
