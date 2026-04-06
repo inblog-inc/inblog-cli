@@ -4,7 +4,7 @@ import { createClientFromCommand, isJsonMode } from '../utils/client-factory.js'
 import { printJson, printTable, printDetail, printSuccess, printWarning, truncate } from '../utils/output.js';
 import { handleError } from '../utils/errors.js';
 import { resolveImageUrl, processContentImages } from '../utils/upload.js';
-import type { PostCreateInput } from '../sdk/types.js';
+import type { PostCreateInput, CustomScriptsInput } from '../sdk/types.js';
 import type { Post } from '../sdk/types.js';
 
 function formatPost(post: Post): [string, any][] {
@@ -20,9 +20,30 @@ function formatPost(post: Post): [string, any][] {
     ['Canonical URL', post.canonical_url],
     ['Meta Title', post.meta_title],
     ['Meta Description', post.meta_description],
+    ['CTA', post.cta_text ? `${post.cta_text} → ${post.cta_link}` : null],
+    ['JSON-LD', post.custom_scripts?.json_ld_script ? 'Set' : null],
+    ['Custom Scripts', post.custom_scripts ? Object.entries(post.custom_scripts).filter(([k, v]) => k !== 'json_ld_script' && v).map(([k]) => k).join(', ') || null : null],
     ['Tags', post.tags?.map((t) => t.name).join(', ')],
     ['Authors', post.authors?.map((a) => a.author_name).join(', ')],
   ];
+}
+
+function buildCustomScripts(opts: Record<string, any>): CustomScriptsInput | undefined {
+  const scripts: CustomScriptsInput = {};
+  let hasAny = false;
+
+  if (opts.jsonLdFile) {
+    scripts.json_ld_script = fs.readFileSync(opts.jsonLdFile, 'utf-8');
+    hasAny = true;
+  }
+
+  if (opts.customScriptsFile) {
+    const raw = JSON.parse(fs.readFileSync(opts.customScriptsFile, 'utf-8'));
+    Object.assign(scripts, raw);
+    hasAny = true;
+  }
+
+  return hasAny ? scripts : undefined;
 }
 
 export function registerPostsCommands(program: Command): void {
@@ -33,6 +54,8 @@ Examples:
   $ inblog posts list --draft --tag-id 3 --json          List drafts with tag ID 3
   $ inblog posts create --title "My Post" --content-file ./content.html --tag-ids 1,2 --json
   $ inblog posts update 123 --title "New Title" --json   Update post title
+  $ inblog posts update 123 --cta-text "Try free" --cta-link "https://..." --json
+  $ inblog posts update 123 --json-ld-file ./schema.json --json
   $ inblog posts publish 123 --json                      Publish a draft
   $ inblog posts schedule 123 --at "2025-06-01T09:00:00+09:00" --json
   $ inblog posts add-tags 123 --tag-ids 4,5 --json       Add tags to a post
@@ -131,6 +154,12 @@ Examples:
     .option('--canonical-url <url>', 'Canonical URL')
     .option('--meta-title <title>', 'Meta title')
     .option('--meta-description <desc>', 'Meta description')
+    .option('--cta-text <text>', 'CTA button text')
+    .option('--cta-link <url>', 'CTA button URL')
+    .option('--cta-color <hex>', 'CTA button background color')
+    .option('--cta-text-color <hex>', 'CTA button text color')
+    .option('--json-ld-file <path>', 'JSON-LD script from file')
+    .option('--custom-scripts-file <path>', 'Custom scripts JSON file (head/body scripts)')
     .option('--skip-preview', 'Skip automatic preview link generation')
     .action(async function (this: Command) {
       const json = isJsonMode(this);
@@ -162,6 +191,12 @@ Examples:
         if (opts.canonicalUrl) input.canonical_url = opts.canonicalUrl;
         if (opts.metaTitle) input.meta_title = opts.metaTitle;
         if (opts.metaDescription) input.meta_description = opts.metaDescription;
+        if (opts.ctaText) input.cta_text = opts.ctaText;
+        if (opts.ctaLink) input.cta_link = opts.ctaLink;
+        if (opts.ctaColor) input.cta_color = opts.ctaColor;
+        if (opts.ctaTextColor) input.cta_text_color = opts.ctaTextColor;
+        const customScripts = buildCustomScripts(opts);
+        if (customScripts) input.custom_scripts = customScripts;
         if (opts.tagIds) input.tag_ids = opts.tagIds.split(',').map(Number);
         if (opts.authorIds) input.author_ids = opts.authorIds.split(',');
 
@@ -205,6 +240,13 @@ Examples:
     .option('--canonical-url <url>', 'Canonical URL')
     .option('--meta-title <title>', 'Meta title')
     .option('--meta-description <desc>', 'Meta description')
+    .option('--cta-text <text>', 'CTA button text (empty to remove)')
+    .option('--cta-link <url>', 'CTA button URL (empty to remove)')
+    .option('--cta-color <hex>', 'CTA button background color (empty to remove)')
+    .option('--cta-text-color <hex>', 'CTA button text color (empty to remove)')
+    .option('--json-ld-file <path>', 'JSON-LD script from file')
+    .option('--custom-scripts-file <path>', 'Custom scripts JSON file (head/body scripts)')
+    .option('--remove-custom-scripts', 'Remove all custom scripts')
     .option('--skip-preview', 'Skip automatic preview link generation')
     .action(async function (this: Command, id: string) {
       const json = isJsonMode(this);
@@ -235,6 +277,16 @@ Examples:
         if (opts.canonicalUrl !== undefined) input.canonical_url = opts.canonicalUrl || null;
         if (opts.metaTitle !== undefined) input.meta_title = opts.metaTitle || null;
         if (opts.metaDescription !== undefined) input.meta_description = opts.metaDescription || null;
+        if (opts.ctaText !== undefined) input.cta_text = opts.ctaText || null;
+        if (opts.ctaLink !== undefined) input.cta_link = opts.ctaLink || null;
+        if (opts.ctaColor !== undefined) input.cta_color = opts.ctaColor || null;
+        if (opts.ctaTextColor !== undefined) input.cta_text_color = opts.ctaTextColor || null;
+        if (opts.removeCustomScripts) {
+          input.custom_scripts = null;
+        } else {
+          const customScripts = buildCustomScripts(opts);
+          if (customScripts) input.custom_scripts = customScripts;
+        }
 
         if (Object.keys(input).length === 0) {
           throw new Error('No fields to update. Provide at least one option.');

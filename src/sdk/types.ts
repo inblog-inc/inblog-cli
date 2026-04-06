@@ -139,6 +139,14 @@ export interface FormResponse {
 
 // ── Request types ──
 
+export interface CustomScriptsInput {
+  head_start_script?: string | null;
+  head_end_script?: string | null;
+  body_start_script?: string | null;
+  body_end_script?: string | null;
+  json_ld_script?: string | null;
+}
+
 export interface PostCreateInput {
   title: string;
   slug?: string;
@@ -155,6 +163,7 @@ export interface PostCreateInput {
   cta_link?: string;
   cta_color?: string;
   cta_text_color?: string;
+  custom_scripts?: CustomScriptsInput;
   tag_ids?: number[];
   author_ids?: string[];
 }
@@ -175,6 +184,7 @@ export interface PostUpdateInput {
   cta_link?: string | null;
   cta_color?: string | null;
   cta_text_color?: string | null;
+  custom_scripts?: CustomScriptsInput | null;
 }
 
 export interface TagCreateInput {

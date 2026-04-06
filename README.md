@@ -92,6 +92,15 @@ inblog posts create \
 inblog posts update <id> --title "New Title" --image ./new-cover.jpg
 inblog posts delete <id>
 
+# CTA settings
+inblog posts update <id> --cta-text "Try free" --cta-link "https://..." --cta-color "#3B82F6"
+inblog posts update <id> --cta-text ""         # Remove CTA
+
+# Custom scripts & JSON-LD
+inblog posts update <id> --json-ld-file ./schema.json
+inblog posts update <id> --custom-scripts-file ./scripts.json
+inblog posts update <id> --remove-custom-scripts
+
 inblog posts publish <id>                  # Publish immediately
 inblog posts unpublish <id>                # Unpublish
 inblog posts schedule <id> --at "2026-03-15T09:00:00+09:00"
