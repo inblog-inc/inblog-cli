@@ -177,6 +177,7 @@ inblog form-responses list --form-id <id>
 inblog search-console connect              # OAuth connect
 inblog search-console status               # Connection status
 inblog search-console keywords --sort clicks --limit 20
+inblog search-console keywords --keyword-filter "seo*" --page-filter "/blog/*"
 inblog search-console pages --sort clicks --limit 20
 ```
 
@@ -188,6 +189,16 @@ inblog analytics posts --sort visits --limit 20 --include title
 inblog analytics sources --limit 20        # Traffic sources
 inblog analytics post <id> --interval day  # Single post traffic
 inblog analytics post <id> --sources       # Single post sources
+inblog analytics compare --start-date 2026-03-01 --end-date 2026-03-31
+```
+
+### Search & Export
+
+```bash
+inblog posts search --query "tutorial"             # Search posts by keyword
+inblog posts bulk-update --ids 1,2,3 --meta-title "New Title"
+inblog posts export --published --format md --output ./out
+inblog posts sitemap                               # List published post URLs
 ```
 
 ## Global Options
