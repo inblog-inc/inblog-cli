@@ -5,6 +5,17 @@ import { printJson, printTable, printDetail, printSuccess, printWarning } from '
 import { handleError } from '../utils/errors.js';
 import { startCallbackServer } from '../utils/callback-server.js';
 
+/**
+ * Convert a simple glob pattern to a RegExp (supports * and ?).
+ */
+function globToRegex(pattern: string): RegExp {
+  const escaped = pattern
+    .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+    .replace(/\*/g, '.*')
+    .replace(/\?/g, '.');
+  return new RegExp(escaped, 'i');
+}
+
 export function registerSearchConsoleCommands(program: Command): void {
   const sc = program
     .command('search-console')
@@ -112,30 +123,54 @@ Examples:
     .option('--sort <field>', 'Sort by: clicks, impressions, ctr, position', 'clicks')
     .option('--order <dir>', 'Sort order: asc, desc', 'desc')
     .option('-l, --limit <number>', 'Max results', '20')
+    .option('--page-filter <pattern>', 'Filter by page URL pattern (glob-style, e.g., "/blog/*")')
+    .option('--keyword-filter <pattern>', 'Filter by keyword pattern (glob-style)')
     .action(async function (this: Command) {
       const json = isJsonMode(this);
       try {
         const opts = this.opts();
         const { searchConsole } = createClientFromCommand(this);
+
+        // Fetch more data when client-side filtering is used
+        const fetchLimit = (opts.pageFilter || opts.keywordFilter)
+          ? 1000
+          : parseInt(opts.limit, 10);
+
         const data = await searchConsole.keywords({
           start_date: opts.startDate,
           end_date: opts.endDate,
           sort: opts.sort,
           order: opts.order,
-          limit: parseInt(opts.limit, 10),
+          limit: fetchLimit,
         });
 
+        let rows = (data.keywords || data.data || []);
+
+        // Client-side filtering
+        if (opts.keywordFilter) {
+          const regex = globToRegex(opts.keywordFilter);
+          rows = rows.filter((k: any) => regex.test(k.keyword || k.key || ''));
+        }
+        if (opts.pageFilter) {
+          const regex = globToRegex(opts.pageFilter);
+          rows = rows.filter((k: any) => regex.test(k.page || k.url || ''));
+        }
+
+        // Apply limit after filtering
+        const limit = parseInt(opts.limit, 10);
+        rows = rows.slice(0, limit);
+
         if (json) {
-          printJson(data);
+          printJson({ ...data, keywords: rows, data: rows });
         } else {
-          const rows = (data.keywords || data.data || []).map((k: any) => [
+          const tableRows = rows.map((k: any) => [
             k.keyword || k.key,
             k.clicks,
             k.impressions,
             typeof k.ctr === 'number' ? `${(k.ctr * 100).toFixed(1)}%` : k.ctr,
             typeof k.position === 'number' ? k.position.toFixed(1) : k.position,
           ]);
-          printTable(['Keyword', 'Clicks', 'Impressions', 'CTR', 'Position'], rows);
+          printTable(['Keyword', 'Clicks', 'Impressions', 'CTR', 'Position'], tableRows);
         }
       } catch (error) {
         handleError(error, json);

@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { createClientFromCommand, isJsonMode } from '../utils/client-factory.js';
 import { printJson, printTable, printDetail, printSuccess, printWarning, truncate } from '../utils/output.js';
 import { handleError } from '../utils/errors.js';
@@ -46,6 +47,10 @@ function buildCustomScripts(opts: Record<string, any>): CustomScriptsInput | und
   return hasAny ? scripts : undefined;
 }
 
+function escapeHtml(str: string): string {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 export function registerPostsCommands(program: Command): void {
   const posts = program.command('posts').description('CRUD, publish, schedule posts + manage tags/authors')
     .addHelpText('after', `
@@ -59,7 +64,11 @@ Examples:
   $ inblog posts publish 123 --json                      Publish a draft
   $ inblog posts schedule 123 --at "2025-06-01T09:00:00+09:00" --json
   $ inblog posts add-tags 123 --tag-ids 4,5 --json       Add tags to a post
-  $ inblog posts delete 123 --json                       Delete a post`);
+  $ inblog posts delete 123 --json                       Delete a post
+  $ inblog posts search --query "tutorial" --json        Search posts by keyword
+  $ inblog posts bulk-update --ids 1,2,3 --meta-title "New" --json
+  $ inblog posts export --published --format md --output ./out
+  $ inblog posts sitemap --json                          List published post URLs`);
 
   posts
     .command('list')
@@ -506,6 +515,342 @@ Examples:
           printJson({ success: true, postId, authorId });
         } else {
           printSuccess(`Author ${authorId} removed from post ${postId}.`);
+        }
+      } catch (error) {
+        handleError(error, json);
+      }
+    });
+
+  // ── Search ──
+
+  posts
+    .command('search')
+    .description('Search posts by title, slug, or description')
+    .requiredOption('-q, --query <string>', 'Search query (case-insensitive substring match)')
+    .option('-p, --page <number>', 'Page number', '1')
+    .option('-l, --limit <number>', 'Items per page', '20')
+    .action(async function (this: Command) {
+      const json = isJsonMode(this);
+      try {
+        const opts = this.opts();
+        const { posts: endpoint } = createClientFromCommand(this);
+        const query = opts.query.toLowerCase();
+
+        // Fetch all posts (paginate through all pages)
+        let allPosts: Post[] = [];
+        let page = 1;
+        let hasMore = true;
+        while (hasMore) {
+          const { data, meta } = await endpoint.list({
+            page,
+            limit: 100,
+            include: ['tags', 'authors'],
+          });
+          allPosts = allPosts.concat(data);
+          hasMore = meta.total ? allPosts.length < meta.total : data.length === 100;
+          page++;
+        }
+
+        // Client-side filter
+        const matched = allPosts.filter((p) => {
+          const title = (p.title || '').toLowerCase();
+          const slug = (p.slug || '').toLowerCase();
+          const desc = (p.description || '').toLowerCase();
+          return title.includes(query) || slug.includes(query) || desc.includes(query);
+        });
+
+        // Paginate results
+        const pageNum = parseInt(opts.page, 10);
+        const limit = parseInt(opts.limit, 10);
+        const start = (pageNum - 1) * limit;
+        const paged = matched.slice(start, start + limit);
+
+        if (json) {
+          printJson({ data: paged, meta: { total: matched.length, page: pageNum, limit } });
+        } else {
+          if (paged.length === 0) {
+            printWarning(`No posts matching "${opts.query}".`);
+          } else {
+            printTable(
+              ['ID', 'Title', 'Slug', 'Published'],
+              paged.map((p) => [
+                p.id,
+                truncate(p.title, 40),
+                truncate(p.slug, 30),
+                p.published ? 'Yes' : 'No',
+              ]),
+            );
+            console.log(`\nShowing page ${pageNum} (${paged.length} of ${matched.length} matches)`);
+          }
+        }
+      } catch (error) {
+        handleError(error, json);
+      }
+    });
+
+  // ── Bulk Update ──
+
+  posts
+    .command('bulk-update')
+    .description('Update multiple posts at once by IDs')
+    .requiredOption('--ids <ids>', 'Comma-separated post IDs')
+    .option('--meta-title <title>', 'Meta title')
+    .option('--meta-description <desc>', 'Meta description')
+    .option('--cta-text <text>', 'CTA button text (empty to remove)')
+    .option('--cta-link <url>', 'CTA button URL (empty to remove)')
+    .option('--cta-color <hex>', 'CTA button background color (empty to remove)')
+    .option('--cta-text-color <hex>', 'CTA button text color (empty to remove)')
+    .option('--canonical-url <url>', 'Canonical URL (empty to remove)')
+    .option('--json-ld-file <path>', 'JSON-LD script from file')
+    .option('--custom-scripts-file <path>', 'Custom scripts JSON file')
+    .option('--remove-custom-scripts', 'Remove all custom scripts')
+    .action(async function (this: Command) {
+      const json = isJsonMode(this);
+      try {
+        const opts = this.opts();
+        const { posts: endpoint } = createClientFromCommand(this);
+        const ids = opts.ids.split(',').map((id: string) => id.trim());
+
+        // Build common update input
+        const input: Record<string, any> = {};
+        if (opts.metaTitle !== undefined) input.meta_title = opts.metaTitle || null;
+        if (opts.metaDescription !== undefined) input.meta_description = opts.metaDescription || null;
+        if (opts.ctaText !== undefined) input.cta_text = opts.ctaText || null;
+        if (opts.ctaLink !== undefined) input.cta_link = opts.ctaLink || null;
+        if (opts.ctaColor !== undefined) input.cta_color = opts.ctaColor || null;
+        if (opts.ctaTextColor !== undefined) input.cta_text_color = opts.ctaTextColor || null;
+        if (opts.canonicalUrl !== undefined) input.canonical_url = opts.canonicalUrl || null;
+        if (opts.removeCustomScripts) {
+          input.custom_scripts = null;
+        } else {
+          const customScripts = buildCustomScripts(opts);
+          if (customScripts) input.custom_scripts = customScripts;
+        }
+
+        if (Object.keys(input).length === 0) {
+          throw new Error('No fields to update. Provide at least one update option.');
+        }
+
+        const results: { id: string; success: boolean; title?: string; error?: string }[] = [];
+
+        for (const id of ids) {
+          try {
+            const { data } = await endpoint.update(id, input);
+            results.push({ id, success: true, title: data.title });
+            if (!json) {
+              printSuccess(`  [${results.length}/${ids.length}] Updated post ${id}: "${data.title}"`);
+            }
+          } catch (err: any) {
+            const msg = err?.message || 'Unknown error';
+            results.push({ id, success: false, error: msg });
+            if (!json) {
+              printWarning(`  [${results.length}/${ids.length}] Failed post ${id}: ${msg}`);
+            }
+          }
+        }
+
+        const succeeded = results.filter((r) => r.success).length;
+        const failed = results.filter((r) => !r.success).length;
+
+        if (json) {
+          printJson({ results, summary: { total: ids.length, succeeded, failed } });
+        } else {
+          console.log(`\nBulk update complete: ${succeeded} succeeded, ${failed} failed out of ${ids.length}.`);
+        }
+      } catch (error) {
+        handleError(error, json);
+      }
+    });
+
+  // ── Export ──
+
+  posts
+    .command('export')
+    .description('Export posts to files (JSON, HTML, or Markdown)')
+    .option('--published', 'Only published posts')
+    .option('--format <format>', 'Output format: json, html, md', 'json')
+    .option('--output <dir>', 'Output directory', './export')
+    .action(async function (this: Command) {
+      const json = isJsonMode(this);
+      try {
+        const opts = this.opts();
+        const { posts: endpoint } = createClientFromCommand(this);
+        const format = opts.format as 'json' | 'html' | 'md';
+        const outputDir = path.resolve(opts.output);
+
+        if (!['json', 'html', 'md'].includes(format)) {
+          throw new Error('Invalid format. Choose: json, html, md');
+        }
+
+        // Fetch all matching posts
+        let allPosts: Post[] = [];
+        let page = 1;
+        let hasMore = true;
+        const filter: Record<string, any> = {};
+        if (opts.published) filter.published = true;
+
+        while (hasMore) {
+          const { data, meta } = await endpoint.list({
+            page,
+            limit: 100,
+            filter: Object.keys(filter).length > 0 ? filter : undefined,
+            include: ['tags', 'authors'],
+          });
+          allPosts = allPosts.concat(data);
+          hasMore = meta.total ? allPosts.length < meta.total : data.length === 100;
+          page++;
+        }
+
+        if (allPosts.length === 0) {
+          if (json) {
+            printJson({ exported: 0, message: 'No posts to export.' });
+          } else {
+            printWarning('No posts found to export.');
+          }
+          return;
+        }
+
+        // Create output directory
+        fs.mkdirSync(outputDir, { recursive: true });
+
+        if (!json) {
+          console.log(`Exporting ${allPosts.length} post(s) to ${outputDir}...`);
+        }
+
+        let exported = 0;
+        for (const post of allPosts) {
+          const slug = post.slug || post.id;
+          let filename: string;
+          let content: string;
+
+          if (format === 'json') {
+            filename = `${slug}.json`;
+            content = JSON.stringify(post, null, 2);
+          } else if (format === 'html') {
+            filename = `${slug}.html`;
+            content = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${escapeHtml(post.title)}</title>
+  ${post.meta_description ? `<meta name="description" content="${escapeHtml(post.meta_description)}">` : ''}
+</head>
+<body>
+  <h1>${escapeHtml(post.title)}</h1>
+  ${post.content_html || ''}
+</body>
+</html>`;
+          } else {
+            filename = `${slug}.md`;
+            const frontmatter = [
+              '---',
+              `title: "${post.title.replace(/"/g, '\\"')}"`,
+              `slug: "${post.slug}"`,
+              `published: ${post.published}`,
+              post.published_at ? `published_at: "${post.published_at}"` : null,
+              post.description ? `description: "${post.description.replace(/"/g, '\\"')}"` : null,
+              post.tags?.length ? `tags: [${post.tags.map((t) => `"${t.name}"`).join(', ')}]` : null,
+              '---',
+            ].filter(Boolean).join('\n');
+
+            // Basic HTML to markdown conversion
+            let body = post.content_html || '';
+            body = body.replace(/<h1[^>]*>(.*?)<\/h1>/gi, '# $1\n\n');
+            body = body.replace(/<h2[^>]*>(.*?)<\/h2>/gi, '## $1\n\n');
+            body = body.replace(/<h3[^>]*>(.*?)<\/h3>/gi, '### $1\n\n');
+            body = body.replace(/<p[^>]*>(.*?)<\/p>/gi, '$1\n\n');
+            body = body.replace(/<strong[^>]*>(.*?)<\/strong>/gi, '**$1**');
+            body = body.replace(/<em[^>]*>(.*?)<\/em>/gi, '*$1*');
+            body = body.replace(/<a[^>]*href="([^"]*)"[^>]*>(.*?)<\/a>/gi, '[$2]($1)');
+            body = body.replace(/<img[^>]*src="([^"]*)"[^>]*alt="([^"]*)"[^>]*\/?>/gi, '![$2]($1)');
+            body = body.replace(/<br\s*\/?>/gi, '\n');
+            body = body.replace(/<li[^>]*>(.*?)<\/li>/gi, '- $1\n');
+            body = body.replace(/<\/?[^>]+(>|$)/g, '');
+            body = body.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"');
+            body = body.trim();
+
+            content = `${frontmatter}\n\n${body}\n`;
+          }
+
+          fs.writeFileSync(path.join(outputDir, filename), content, 'utf-8');
+          exported++;
+
+          if (!json) {
+            process.stdout.write(`  [${exported}/${allPosts.length}] ${filename}\n`);
+          }
+        }
+
+        if (json) {
+          printJson({ exported, directory: outputDir, format });
+        } else {
+          printSuccess(`\nExported ${exported} post(s) to ${outputDir}/`);
+        }
+      } catch (error) {
+        handleError(error, json);
+      }
+    });
+
+  // ── Sitemap ──
+
+  posts
+    .command('sitemap')
+    .description('List all published posts with URL and last modified date')
+    .action(async function (this: Command) {
+      const json = isJsonMode(this);
+      try {
+        const { posts: endpoint, blogs } = createClientFromCommand(this);
+
+        // Get blog info for base URL
+        let baseUrl = '';
+        try {
+          const blogData = await blogs.me();
+          const blog = blogData.data;
+          if (blog.custom_domain) {
+            baseUrl = `https://${blog.custom_domain}`;
+          } else if (blog.custom_subdirectory) {
+            baseUrl = blog.custom_subdirectory;
+          } else {
+            baseUrl = `https://${blog.subdomain}.inblog.ai`;
+          }
+        } catch {
+          baseUrl = '';
+        }
+
+        // Fetch all published posts
+        let allPosts: Post[] = [];
+        let page = 1;
+        let hasMore = true;
+        while (hasMore) {
+          const { data, meta } = await endpoint.list({
+            page,
+            limit: 100,
+            filter: { published: true },
+          });
+          allPosts = allPosts.concat(data);
+          hasMore = meta.total ? allPosts.length < meta.total : data.length === 100;
+          page++;
+        }
+
+        const entries = allPosts.map((p) => ({
+          url: baseUrl ? `${baseUrl}/${p.slug}` : `/${p.slug}`,
+          lastmod: p.published_at || null,
+        }));
+
+        if (json) {
+          printJson(entries);
+        } else {
+          if (entries.length === 0) {
+            printWarning('No published posts found.');
+          } else {
+            printTable(
+              ['URL', 'Last Modified'],
+              entries.map((e) => [
+                e.url,
+                e.lastmod ? new Date(e.lastmod).toLocaleDateString() : '—',
+              ]),
+            );
+            console.log(`\n${entries.length} published post(s)`);
+          }
         }
       } catch (error) {
         handleError(error, json);

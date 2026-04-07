@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import { createClientFromCommand, isJsonMode } from '../utils/client-factory.js';
-import { printJson, printTable, truncate } from '../utils/output.js';
+import { printJson, printTable, printWarning, truncate } from '../utils/output.js';
 import { handleError } from '../utils/errors.js';
 
 export function registerAnalyticsCommands(program: Command): void {
@@ -13,7 +13,9 @@ Examples:
   $ inblog analytics posts --sort visits --limit 10 --include title --json
   $ inblog analytics sources --limit 20 --json
   $ inblog analytics post 123 --start-date 2025-01-01 --json
-  $ inblog analytics post 123 --sources --json     Show referrer sources for a post`);
+  $ inblog analytics post 123 --sources --json     Show referrer sources for a post
+  $ inblog analytics compare --start-date 2025-03-01 --end-date 2025-03-31 --json`);
+
 
   analytics
     .command('traffic')
@@ -174,6 +176,89 @@ Examples:
             ]);
             printTable(['Date', 'Visits', 'Clicks', 'Organic'], rows);
           }
+        }
+      } catch (error) {
+        handleError(error, json);
+      }
+    });
+
+  analytics
+    .command('compare')
+    .description('Compare analytics between current and previous period')
+    .option('--start-date <date>', 'Start date (YYYY-MM-DD)')
+    .option('--end-date <date>', 'End date (YYYY-MM-DD)')
+    .option('--vs-previous-period', 'Compare with previous period of same length (default)', true)
+    .action(async function (this: Command) {
+      const json = isJsonMode(this);
+      try {
+        const opts = this.opts();
+        const { analytics: endpoint } = createClientFromCommand(this);
+
+        // Determine current period
+        const endDate = opts.endDate ? new Date(opts.endDate) : new Date();
+        const startDate = opts.startDate ? new Date(opts.startDate) : new Date(endDate.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+        const periodLengthMs = endDate.getTime() - startDate.getTime();
+        const prevEnd = new Date(startDate.getTime() - 1);  // day before current start
+        const prevStart = new Date(prevEnd.getTime() - periodLengthMs);
+
+        const fmt = (d: Date) => d.toISOString().split('T')[0];
+
+        // Fetch both periods
+        const [currentData, previousData] = await Promise.all([
+          endpoint.traffic({ start_date: fmt(startDate), end_date: fmt(endDate) }),
+          endpoint.traffic({ start_date: fmt(prevStart), end_date: fmt(prevEnd) }),
+        ]);
+
+        // Sum metrics for each period
+        const sumMetrics = (rows: any[]) => {
+          const result = { visits: 0, clicks: 0, organic: 0 };
+          for (const r of rows) {
+            result.visits += r.visits || 0;
+            result.clicks += r.clicks || 0;
+            result.organic += r.organic || 0;
+          }
+          return result;
+        };
+
+        const current = sumMetrics(currentData.data || []);
+        const previous = sumMetrics(previousData.data || []);
+
+        const delta = (cur: number, prev: number) => {
+          const abs = cur - prev;
+          const pct = prev === 0 ? (cur > 0 ? 100 : 0) : ((abs / prev) * 100);
+          return { absolute: abs, percent: pct };
+        };
+
+        const comparison = {
+          period: { start: fmt(startDate), end: fmt(endDate) },
+          previous_period: { start: fmt(prevStart), end: fmt(prevEnd) },
+          metrics: {
+            visits: { current: current.visits, previous: previous.visits, delta: delta(current.visits, previous.visits) },
+            clicks: { current: current.clicks, previous: previous.clicks, delta: delta(current.clicks, previous.clicks) },
+            organic: { current: current.organic, previous: previous.organic, delta: delta(current.organic, previous.organic) },
+          },
+        };
+
+        if (json) {
+          printJson(comparison);
+        } else {
+          console.log(`\nCurrent period:  ${fmt(startDate)} to ${fmt(endDate)}`);
+          console.log(`Previous period: ${fmt(prevStart)} to ${fmt(prevEnd)}\n`);
+
+          const fmtDelta = (d: { absolute: number; percent: number }) => {
+            const sign = d.absolute >= 0 ? '+' : '';
+            return `${sign}${d.absolute} (${sign}${d.percent.toFixed(1)}%)`;
+          };
+
+          printTable(
+            ['Metric', 'Current', 'Previous', 'Delta'],
+            [
+              ['Visits', current.visits, previous.visits, fmtDelta(comparison.metrics.visits.delta)],
+              ['Clicks', current.clicks, previous.clicks, fmtDelta(comparison.metrics.clicks.delta)],
+              ['Organic', current.organic, previous.organic, fmtDelta(comparison.metrics.organic.delta)],
+            ],
+          );
         }
       } catch (error) {
         handleError(error, json);
