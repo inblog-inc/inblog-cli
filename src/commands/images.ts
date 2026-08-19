@@ -30,7 +30,7 @@ Valid buckets: post_image, featured_image, logo, favicon, og_image, banner, avat
 
         const results: { file: string; url: string }[] = [];
         for (const file of files) {
-          const url = await uploadImage(file, bucket);
+          const url = await uploadImage(file, bucket, this.optsWithGlobals().baseUrl);
           results.push({ file, url });
           if (!json) {
             printSuccess(`${file} → ${url}`);

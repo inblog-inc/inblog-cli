@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import { select } from '@inquirer/prompts';
 import open from 'open';
 import { createClientFromCommand, isJsonMode, isNoInputMode } from '../utils/client-factory.js';
-import { readSession, setActiveBlog } from '../utils/token-store.js';
+import { isApiKeySession, readSession, setActiveBlog } from '../utils/token-store.js';
 import { getValidAccessToken } from '../utils/token-refresh.js';
 import { printJson, printDetail, printSuccess, printTable, printWarning } from '../utils/output.js';
 import { handleError } from '../utils/errors.js';
@@ -83,6 +83,11 @@ Examples:
         if (!session) {
           throw new Error('OAuth session required. Run `inblog auth login` first.');
         }
+        if (isApiKeySession(session)) {
+          throw new Error(
+            `This API key is scoped to "${session.activeBlogSubdomain}". \`blogs list\` is OAuth-only; log in with OAuth to view or switch blogs.`,
+          );
+        }
 
         const accessToken = await getValidAccessToken();
         if (!accessToken) {
@@ -144,6 +149,11 @@ Examples:
         const session = readSession();
         if (!session) {
           throw new Error('OAuth session required. Run `inblog auth login` first.');
+        }
+        if (isApiKeySession(session)) {
+          throw new Error(
+            `This API key is scoped to "${session.activeBlogSubdomain}". \`blogs switch\` is OAuth-only; log in with OAuth to switch blogs.`,
+          );
         }
 
         const accessToken = await getValidAccessToken();
@@ -239,15 +249,16 @@ Examples:
       try {
         const opts = this.opts();
         const ctx = createClientFromCommand(this);
+        const baseUrl = this.optsWithGlobals().baseUrl;
 
         const input: Record<string, any> = {};
         if (opts.title) input.title = opts.title;
         if (opts.description) input.description = opts.description;
         if (opts.language) input.blog_language = opts.language;
         if (opts.timezoneDiff !== undefined) input.timezone_diff = parseInt(opts.timezoneDiff, 10);
-        if (opts.logo) input.logo = await resolveImageUrl(opts.logo, 'logo');
-        if (opts.favicon) input.favicon = await resolveImageUrl(opts.favicon, 'favicon');
-        if (opts.ogImage) input.og_image = await resolveImageUrl(opts.ogImage, 'og_image');
+        if (opts.logo) input.logo = await resolveImageUrl(opts.logo, 'logo', baseUrl);
+        if (opts.favicon) input.favicon = await resolveImageUrl(opts.favicon, 'favicon', baseUrl);
+        if (opts.ogImage) input.og_image = await resolveImageUrl(opts.ogImage, 'og_image', baseUrl);
         if (opts.gaId) input.ga_measurement_id = opts.gaId;
 
         if (Object.keys(input).length === 0) {
@@ -426,8 +437,9 @@ Examples:
       const json = isJsonMode(this);
       try {
         const opts = this.opts();
+        const baseUrl = this.optsWithGlobals().baseUrl;
         const input: Record<string, any> = {};
-        if (opts.image) input.banner_url = await resolveImageUrl(opts.image, 'banner');
+        if (opts.image) input.banner_url = await resolveImageUrl(opts.image, 'banner', baseUrl);
         if (opts.title) input.banner_title = opts.title;
         if (opts.subtext) input.banner_subtext = opts.subtext;
         if (opts.titleColor) input.banner_title_color = opts.titleColor;

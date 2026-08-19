@@ -175,6 +175,7 @@ Examples:
       try {
         const opts = this.opts();
         const { posts: endpoint, previewTokens } = createClientFromCommand(this);
+        const baseUrl = this.optsWithGlobals().baseUrl;
 
         let contentHtml = opts.content;
         if (opts.contentFile) {
@@ -183,7 +184,7 @@ Examples:
 
         // Upload local/base64 images in content
         if (contentHtml) {
-          const { html, uploadCount } = await processContentImages(contentHtml);
+          const { html, uploadCount } = await processContentImages(contentHtml, baseUrl);
           contentHtml = html;
           if (uploadCount > 0 && !json) {
             printWarning(`Uploaded ${uploadCount} image(s) to CDN.`);
@@ -194,7 +195,7 @@ Examples:
         if (opts.slug) input.slug = opts.slug;
         if (opts.description) input.description = opts.description;
         if (contentHtml) input.content_html = contentHtml;
-        if (opts.image) input.image = { url: await resolveImageUrl(opts.image, 'featured_image') };
+        if (opts.image) input.image = { url: await resolveImageUrl(opts.image, 'featured_image', baseUrl) };
         if (opts.notionUrl) input.notion_url = opts.notionUrl;
         if (opts.published) input.published = true;
         if (opts.canonicalUrl) input.canonical_url = opts.canonicalUrl;
@@ -262,6 +263,7 @@ Examples:
       try {
         const opts = this.opts();
         const { posts: endpoint, previewTokens } = createClientFromCommand(this);
+        const baseUrl = this.optsWithGlobals().baseUrl;
 
         let contentHtml = opts.content;
         if (opts.contentFile) {
@@ -270,7 +272,7 @@ Examples:
 
         // Upload local/base64 images in content
         if (contentHtml) {
-          const { html, uploadCount } = await processContentImages(contentHtml);
+          const { html, uploadCount } = await processContentImages(contentHtml, baseUrl);
           contentHtml = html;
           if (uploadCount > 0 && !json) {
             printWarning(`Uploaded ${uploadCount} image(s) to CDN.`);
@@ -282,7 +284,7 @@ Examples:
         if (opts.slug) input.slug = opts.slug;
         if (opts.description) input.description = opts.description;
         if (contentHtml) input.content_html = contentHtml;
-        if (opts.image) input.image = { url: await resolveImageUrl(opts.image, 'featured_image') };
+        if (opts.image) input.image = { url: await resolveImageUrl(opts.image, 'featured_image', baseUrl) };
         if (opts.canonicalUrl !== undefined) input.canonical_url = opts.canonicalUrl || null;
         if (opts.metaTitle !== undefined) input.meta_title = opts.metaTitle || null;
         if (opts.metaDescription !== undefined) input.meta_description = opts.metaDescription || null;
