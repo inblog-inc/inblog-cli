@@ -214,7 +214,7 @@ jobs:
   "name": "@inblog/cli",
   "version": "0.1.0",
   "description": "CLI tool for managing inblog.ai content",
-  "bin": { "inblog": "./dist/bin/inblog.js" },
+  "bin": { "inblog": "./dist/bin/inblog.mjs" },
   "main": "./dist/sdk/index.js",       // SDK 프로그래매틱 사용
   "types": "./dist/sdk/index.d.ts",     // TypeScript 타입
   "files": ["dist", "README.md"],       // npm에 포함할 파일
@@ -251,5 +251,5 @@ jobs:
 | `npm ERR! 402 Payment Required` | `--access public` 추가 (scoped package) |
 | `npm ERR! 403 Forbidden` | npm 조직 권한 확인, `npm login` 재시도 |
 | `npm ERR! 409 Conflict` | 이미 같은 버전 존재 → `npm version` 실행 |
-| `bin` 실행 안됨 | `dist/bin/inblog.js` 첫 줄에 `#!/usr/bin/env node` 확인 |
+| `bin` 실행 안됨 | `dist/bin/inblog.mjs` 첫 줄에 `#!/usr/bin/env node` 확인 |
 | TypeScript import 에러 | `tsup.config.ts`에서 `dts: true` 확인 |
