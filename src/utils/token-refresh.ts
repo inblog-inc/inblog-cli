@@ -1,4 +1,4 @@
-import { readSession, writeSession, type StoredSession, type StoredTokens } from './token-store.js';
+import { isApiKeySession, readSession, writeSession, type StoredSession, type StoredTokens } from './token-store.js';
 
 const SUPABASE_URL =
   process.env.INBLOG_SUPABASE_URL || 'https://fgobbnslcbjgothosvni.supabase.co';
@@ -12,6 +12,7 @@ const REFRESH_BUFFER_SECONDS = 60;
 export { SUPABASE_URL, SUPABASE_ANON_KEY };
 
 function isTokenExpiringSoon(session: StoredSession): boolean {
+  if (isApiKeySession(session)) return false;
   const now = Math.floor(Date.now() / 1000);
   return session.tokens.expires_at - now < REFRESH_BUFFER_SECONDS;
 }
@@ -46,7 +47,7 @@ async function refreshTokens(refreshToken: string): Promise<StoredTokens> {
  */
 export async function getValidAccessToken(): Promise<string | null> {
   const session = readSession();
-  if (!session) return null;
+  if (!session || isApiKeySession(session)) return null;
 
   if (!isTokenExpiringSoon(session)) {
     return session.tokens.access_token;

@@ -27,12 +27,14 @@ program
   .addHelpText('after', `
 Examples:
   $ inblog auth login                          Log in with Google OAuth
+  $ inblog auth login --api-key                Log in with a securely prompted API key
   $ inblog posts list --published --json       List published posts as JSON
   $ inblog posts create --title "Hello" --content-file ./post.html --json
   $ inblog tags list --json                    List all tags
   $ inblog analytics traffic --start-date 2025-01-01 --json
 
 Environment:
+  INBLOG_API_KEY  API key for non-interactive \`auth login\`
   Config: ~/.config/inblog/config.json
   Docs:   https://inblog.ai/docs/api`);
 

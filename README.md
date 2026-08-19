@@ -13,8 +13,8 @@ Requires Node.js 18+.
 ## Quick Start
 
 ```bash
-# Authenticate with your API key
-inblog auth login
+# Recommended: authenticate with a securely masked API-key prompt
+inblog auth login --api-key
 
 # Check current blog
 inblog auth status
@@ -36,8 +36,10 @@ inblog posts publish <id>
 ### Authentication
 
 ```bash
-inblog auth login              # Login with API key
-inblog auth whoami             # Show current user/blog
+inblog auth login              # Login with Google OAuth
+inblog auth login --api-key    # Login with a securely masked API-key prompt
+inblog auth login --api-key YOUR_KEY  # Login with an API key for automation
+INBLOG_API_KEY=YOUR_KEY inblog auth login  # Automation without putting the key in command arguments
 inblog auth status             # Check auth status
 inblog auth logout             # Remove saved credentials
 ```
@@ -46,8 +48,8 @@ inblog auth logout             # Remove saved credentials
 
 ```bash
 inblog blogs me                # Current blog info
-inblog blogs list              # List accessible blogs (OAuth)
-inblog blogs switch [id]       # Switch active blog
+inblog blogs list              # List accessible blogs (OAuth only)
+inblog blogs switch [id]       # Switch active blog (OAuth only)
 inblog blogs update            # Update blog settings
 ```
 
@@ -208,7 +210,6 @@ inblog posts sitemap                               # List published post URLs
 | `--json` | Output as JSON |
 | `--base-url <url>` | Custom API base URL |
 | `--no-color` | Disable colored output |
-| `--api-key <key>` | Use specific API key |
 
 ## Image Handling
 
@@ -223,7 +224,7 @@ The CLI automatically handles image uploads:
 
 ## API Key
 
-Get your API key from [inblog.ai dashboard](https://inblog.ai) > Settings > API Keys. Requires a Team plan or higher.
+Get your API key from [inblog.ai dashboard](https://inblog.ai) > Settings > API Keys. Requires a Team plan or higher. Use `inblog auth login --api-key` when interactive: it masks the key as you type. For CI, set `INBLOG_API_KEY` and run `inblog auth login`; the key is validated with read-only API calls and saved in the CLI session file with `0600` permissions.
 
 ## AI Skills
 
