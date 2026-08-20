@@ -7,7 +7,7 @@ export default defineConfig([
   {
     entry: ['bin/inblog.ts'],
     outDir: 'dist/bin',
-    format: ['cjs'],
+    format: ['esm'],
     target: 'node18',
     platform: 'node',
     banner: { js: '#!/usr/bin/env node' },
